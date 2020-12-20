@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/zjyl1994/kopi"
 )
@@ -32,6 +33,11 @@ func main() {
 	var dst B
 	fmt.Printf("A:%#v\n", src)
 	fmt.Printf("Kopi Result:%v\n", kopi.Kopi(&dst, src, kopi.Option{
-		NameFrom: "Name", NameTo: "Value"}))
+		NameFrom: "ID", NameTo: "AnotherField",
+		TypeFrom: kopi.T(src.ID), TypeTo: kopi.T(dst.AnotherField),
+		TypeConvFunc: func(v interface{}) (interface{}, error) {
+			return strconv.Itoa(v.(int)), nil
+		},
+	}))
 	fmt.Printf("B:%#v\n", dst)
 }

@@ -6,7 +6,7 @@ import (
 	"unicode"
 )
 
-type TypeConvFunc func(interface{}) interface{}
+type TypeConvFunc func(interface{}) (interface{}, error)
 
 type Option struct {
 	NameFrom string
@@ -34,7 +34,7 @@ func Kopi(dst interface{}, src interface{}, opts ...Option) error {
 	for i := 0; i < len(opts); i++ {
 		if opts[i].NameFrom != "" && checkNameExported(opts[i].NameFrom) {
 			if opts[i].NameTo != "" && checkNameExported(opts[i].NameTo) {
-				nameMap[opts[i].NameFrom] = opts[i].NameTo
+				nameMap[opts[i].NameTo] = opts[i].NameFrom
 			} else {
 				return ErrInvalidOption
 			}
@@ -82,14 +82,31 @@ func map2struct(data map[string]interface{}, dst interface{},
 	valueOfDst := reflect.ValueOf(dst)
 	typeOfDst = valueOfDst.Elem().Type()
 	for i := 0; i < typeOfDst.NumField(); i++ {
-		fieldName := typeOfDst.Field(i).Name
-		if value, ok := data[fieldName]; ok {
+		fromName := typeOfDst.Field(i).Name
+		dstName := fromName
+		if newFromName, ok := nameMap[fromName]; ok {
+			fromName = newFromName
+		}
+		if value, ok := data[fromName]; ok {
 			dataType := reflect.TypeOf(value)
 			dstFieldType := typeOfDst.Field(i).Type
 			if dataType == dstFieldType {
-				dstValue := valueOfDst.Elem().FieldByName(fieldName)
+				dstValue := valueOfDst.Elem().FieldByName(dstName)
 				if dstValue.CanSet() {
 					dstValue.Set(reflect.ValueOf(value))
+				}
+			} else {
+				if meta, ok := typeMap[dataType]; ok {
+					if meta.DstType == dstFieldType {
+						newValue, err := meta.ConvFunc(value)
+						if err != nil {
+							return err
+						}
+						dstValue := valueOfDst.Elem().FieldByName(dstName)
+						if dstValue.CanSet() {
+							dstValue.Set(reflect.ValueOf(newValue))
+						}
+					}
 				}
 			}
 		}
@@ -103,4 +120,8 @@ func checkNameExported(name string) bool {
 	}
 	runes := []rune(name)
 	return unicode.IsUpper(runes[0])
+}
+
+func T(v interface{}) reflect.Type {
+	return reflect.TypeOf(v)
 }
