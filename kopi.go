@@ -6,20 +6,55 @@ import (
 	"unicode"
 )
 
-type KopiOption struct {
+type TypeConvFunc func(interface{}) interface{}
+
+type Option struct {
+	NameFrom string
+	NameTo   string
+
+	TypeFrom     reflect.Type
+	TypeTo       reflect.Type
+	TypeConvFunc TypeConvFunc
+}
+
+type typeConvMeta struct {
+	DstType  reflect.Type
+	ConvFunc TypeConvFunc
 }
 
 var (
 	ErrTypeNotPtr    = errors.New("type not ptr")
 	ErrTypeNotStruct = errors.New("type not struct")
+	ErrInvalidOption = errors.New("invalid options")
 )
 
-func Kopi(dst interface{}, src interface{}, opts ...KopiOption) error {
+func Kopi(dst interface{}, src interface{}, opts ...Option) error {
+	nameMap := make(map[string]string)
+	typeMap := make(map[reflect.Type]typeConvMeta)
+	for i := 0; i < len(opts); i++ {
+		if opts[i].NameFrom != "" && checkNameExported(opts[i].NameFrom) {
+			if opts[i].NameTo != "" && checkNameExported(opts[i].NameTo) {
+				nameMap[opts[i].NameFrom] = opts[i].NameTo
+			} else {
+				return ErrInvalidOption
+			}
+		}
+		if opts[i].TypeFrom != nil {
+			if opts[i].TypeTo != nil && opts[i].TypeConvFunc != nil {
+				typeMap[opts[i].TypeFrom] = typeConvMeta{
+					DstType:  opts[i].TypeTo,
+					ConvFunc: opts[i].TypeConvFunc,
+				}
+			} else {
+				return ErrInvalidOption
+			}
+		}
+	}
 	dataMap, err := struct2map(src)
 	if err != nil {
 		return err
 	}
-	return map2struct(dataMap, dst)
+	return map2struct(dataMap, dst, nameMap, typeMap)
 }
 
 func struct2map(v interface{}) (data map[string]interface{}, err error) {
@@ -38,7 +73,8 @@ func struct2map(v interface{}) (data map[string]interface{}, err error) {
 	return data, nil
 }
 
-func map2struct(data map[string]interface{}, dst interface{}) error {
+func map2struct(data map[string]interface{}, dst interface{},
+	nameMap map[string]string, typeMap map[reflect.Type]typeConvMeta) error {
 	typeOfDst := reflect.TypeOf(dst)
 	if typeOfDst.Kind() != reflect.Ptr {
 		return ErrTypeNotPtr
@@ -48,7 +84,9 @@ func map2struct(data map[string]interface{}, dst interface{}) error {
 	for i := 0; i < typeOfDst.NumField(); i++ {
 		fieldName := typeOfDst.Field(i).Name
 		if value, ok := data[fieldName]; ok {
-			if reflect.TypeOf(value) == typeOfDst.Field(i).Type {
+			dataType := reflect.TypeOf(value)
+			dstFieldType := typeOfDst.Field(i).Type
+			if dataType == dstFieldType {
 				dstValue := valueOfDst.Elem().FieldByName(fieldName)
 				if dstValue.CanSet() {
 					dstValue.Set(reflect.ValueOf(value))
