@@ -125,3 +125,28 @@ func checkNameExported(name string) bool {
 func T(v interface{}) reflect.Type {
 	return reflect.TypeOf(v)
 }
+
+func NameOpt(from, to string) Option {
+	return Option{
+		NameFrom: from,
+		NameTo:   to,
+	}
+}
+
+func TypeOpt(from, to interface{}, conv TypeConvFunc) Option {
+	return Option{
+		TypeFrom:     T(from),
+		TypeTo:       T(to),
+		TypeConvFunc: conv,
+	}
+}
+
+func NewOpt(nameFrom, nameTo string, typeFrom, typeTo interface{}, conv TypeConvFunc) Option {
+	return Option{
+		NameFrom:     nameFrom,
+		NameTo:       nameTo,
+		TypeFrom:     T(typeFrom),
+		TypeTo:       T(typeTo),
+		TypeConvFunc: conv,
+	}
+}
